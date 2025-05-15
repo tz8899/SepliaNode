@@ -1,0 +1,59 @@
+services:
+  geth:
+    image: ethereum/client-go:stable
+    container_name: sepolia-geth
+    command:
+      - --sepolia
+      - --syncmode=snap
+      - --datadir=/data
+      - --http
+      - --http.addr=0.0.0.0
+      - --http.port=8545
+      - --http.api=eth,net,web3,debug
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.port=8551
+      - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/shared/jwtsecret
+      - --metrics.expensive
+    volumes:
+      - ./execution:/data
+      - ./shared-data/jwtsecret:/shared/jwtsecret:ro
+    ports:
+      - "8545:8545"    # Geth HTTP RPC
+      - "8551:8551"    # Geth Auth RPC
+      - "30303:30303"  # Geth P2P TCP
+      - "30303:30303/udp" # Geth P2P UDP
+    restart: unless-stopped
+    networks:
+      - sepolia-net
+
+  lighthouse:
+    image: sigp/lighthouse:latest # Using the latest stable Lighthouse image
+    container_name: sepolia-lighthouse
+    command:
+      - lighthouse
+      - beacon_node
+      - --network=sepolia
+      - --datadir=/data
+      - --execution-endpoint=http://geth:8551
+      - --execution-jwt=/shared/jwtsecret
+      - --http # Enable the HTTP API server
+      - --http-address=0.0.0.0
+      - --http-port=5052 # Standard Lighthouse API port
+      - --checkpoint-sync-url=https://beaconstate-sepolia.chainsafe.io # Reliable checkpoint sync URL
+    volumes:
+      - ./consensus:/data # Mount consensus data volume
+      - ./shared-data/jwtsecret:/shared/jwtsecret:ro # Mount shared JWT secret
+    ports:
+      - "5052:5052"    # Lighthouse HTTP API
+      - "9000:9000"    # Lighthouse P2P TCP
+      - "9000:9000/udp" # Lighthouse P2P UDP
+    restart: unless-stopped
+    depends_on:
+      - geth
+    networks:
+      - sepolia-net
+
+networks:
+  sepolia-net:
+    driver: bridge
